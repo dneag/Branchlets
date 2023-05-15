@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 
 #include <maya/MFnMesh.h>
 #include <maya/MFloatPointArray.h>

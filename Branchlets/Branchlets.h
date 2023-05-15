@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 
 #include <maya/MVector.h>
 #include <maya/MQuaternion.h>
