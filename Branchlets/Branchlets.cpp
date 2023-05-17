@@ -70,20 +70,21 @@ void Branchlets::makeVertexCoords(const MPoint startPoint, const std::vector<BSe
 
 	// Make the first ring of vertices
 	findEllipseVectors(major, minor, segs[0]);
-	makeVertexRing(major, minor, ringCenter, sides, verts);
+	makeVertexRing(major, minor, ringCenter, sides, segs[0].v);
 	ringCenter += segs[0].v;
 
 	// Make all vertex rings between the top and bottom of the branchlet
 	for (int i = 0; i < static_cast<int>(segs.size()) - 1; i++) {
 
 		findEllipseVectors(major, minor, ringCenter, segs[i], segs[i + 1]);
-		makeVertexRing(major, minor, ringCenter, sides, verts);
+		makeVertexRing(major, minor, ringCenter, sides, segs[i + 1].v);
+
 		ringCenter += segs[i + 1].v;
 	}
 
 	// Make the last ring of vertices
 	findEllipseVectors(major, minor, segs.back());
-	makeVertexRing(major, minor, ringCenter, sides, verts);
+	makeVertexRing(major, minor, ringCenter, sides, segs.back().v);
 
 	// Make the cap vertex
 	verts.append(ringCenter + (segs.back().v.normal() * segs.back().r));
@@ -91,13 +92,13 @@ void Branchlets::makeVertexCoords(const MPoint startPoint, const std::vector<BSe
 
 void Branchlets::findEllipseVectors(MVector& major, MVector& minor, BSegment seg) {
 
-	MVector cp = seg.v ^ MVector(-1., 0., 0.);
+	MVector cp = seg.v ^ MVector(1., 0., 0.);
 	if (cp.length() < .001) // In case the axis is directly on the x-axis
 		cp = seg.v ^ MVector(0., 1., 0.);
 
 	minor = cp.normal() * seg.r;
 
-	MQuaternion rotation(-(PI / 2.f), minor);
+	MQuaternion rotation((PI / 2.f), minor);
 	major = (seg.v.normal() * seg.r).rotateBy(rotation);
 }
 
@@ -114,13 +115,13 @@ void Branchlets::findEllipseVectors(MVector& major, MVector& minor, const MPoint
 	}
 
 	// The vector along the minor axis is easy since it is always the cross product with its magnitude set to the radius of the top segment
-	minor = (topSeg.v ^ bottomSeg.v).normal() * topSeg.r;
+	minor = (bottomSeg.v ^ topSeg.v).normal() * topSeg.r;
 
 	// To find the vector along the major axis we can use trig on the oblique triangle formed by some key points that lie on the plane
 	// to the cross product of the two segments.  See ConnectorRing.jpg for details.
 
 	// Find points p and q
-	double amountToRotate = (PI / 2.) * -1.;
+	double amountToRotate = (PI / 2.);
 	MQuaternion rotation(amountToRotate, minor);
 	MPoint p = (center - bottomSeg.v) + (bottomSeg.v.normal() * bottomSeg.r).rotateBy(rotation);
 	MPoint q = center + (topSeg.v.normal() * topSeg.r).rotateBy(rotation);
@@ -136,25 +137,30 @@ void Branchlets::findEllipseVectors(MVector& major, MVector& minor, const MPoint
 	major = r - center;
 }
 
-void Branchlets::makeVertexRing(const MVector& major, const MVector& minor, const MPoint& center, int sides, MFloatPointArray& outArray) {
+void Branchlets::makeVertexRing(const MVector& major, const MVector& minor, const MPoint& center, int sides, const MVector& nextSegVect) {
 
 	// We can use the parametric equation of an ellipse to calculate the vertices. That is: p(t) = c + cos(t)u + sin(t)v, where p is the vertex
-	// coordinate as a function of t, the world space polar angle about the center of the ellipse.
+	// coordinate as a function of t, the world space polar angle about the center of the ellipse.  To ensure that vertices on one ring are
+	// correctly aligned with those one the next ring up, create the shape of the ring in world space first by rotating minor and major, then 
+	// rotate back before setting the vertex's coords
+
+	MQuaternion segToWorld(nextSegVect, MVector::yAxis);
+	MVector minorInWorld = minor.rotateBy(segToWorld);
+	MVector majorInWorld = major.rotateBy(segToWorld);
 
 	// Major and minor are the vectors from the center of the ellipse to the points of maximum and minimum curvature.
-	// Since these vectors' polar angles change from one segment to the next, and since the resulting vertex depends on 
-	// these angles, we need to offset the starting angle accordingly.
-	double polarOffset = findVectorPolar(major.x, major.z);
-
-	double angle = 0. - polarOffset;
-	double angleIncrement = ((PI * 2.f) / sides) * -1.;
+	// Since these vectors' polar angles change from one segment to the next, and since the resulting vertex ring depends 
+	// on these angles, we need to offset the starting angle accordingly.
+	double polarOffset = findVectorPolar(majorInWorld.x, majorInWorld.z);
+	double angle = 0. + polarOffset;
+	double angleIncrement = ((PI * 2.f) / sides);
 
 	for (int i = 0; i < sides; i++) {
 
-		MPoint vertex = center + (std::cos(angle) * major) + (std::sin(angle) * minor);
-		outArray.append(vertex);
+		MVector toVertex = (std::cos(angle) * majorInWorld) + (std::sin(angle) * minorInWorld);
 
-		MPoint vect = vertex - center;
+		toVertex = toVertex.rotateBy(segToWorld.inverse());
+		verts.append(center + toVertex);
 
 		angle += angleIncrement;
 	}
@@ -432,5 +438,12 @@ double Branchlets::findVectorPolar(double x, double z)
 	else { pol = 0.; }
 
 	return pol;
+}
 
+MVector Branchlets::projectByNormal(const MVector& p, const MVector& q, const MPoint& s) {
+
+	double angle = q.angle(p);
+	double distanceToPlane = std::sin((PI / 2.) - angle) * p.length();
+	MPoint pointOnPlane = (s + p) - (q.normal() * distanceToPlane);
+	return pointOnPlane - s;
 }

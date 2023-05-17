@@ -55,13 +55,16 @@ protected:
 	void findEllipseVectors(MVector& major, MVector& minor, const MPoint& center, const BSegment& bottomSeg, const BSegment& topSeg);
 
 	// Use the parametric equation for an ellipse in 3D space to calculate the coordinates of 'sides' vertices along its perimeter
-	void makeVertexRing(const MVector& major, const MVector& minor, const MPoint& center, int sides, MFloatPointArray& outArray);
+	void makeVertexRing(const MVector& major, const MVector& minor, const MPoint& center, int sides, const MVector& topSegVect);
 
 	// Find the amount with which to multiply the distance between v coords so that they are proportional to their length in Maya
 	float getVScaler(float vertRingRadius, float uFaceWidth, int sides, float textureWtoHRatio);
 
 	// Find the polar angle of a vector in world space
 	double findVectorPolar(double x, double z);
+
+	// Project p onto the plane to which q is the normal vector, given a shared starting point
+	MVector projectByNormal(const MVector& p, const MVector& q, const MPoint& s);
 
 public:
 
