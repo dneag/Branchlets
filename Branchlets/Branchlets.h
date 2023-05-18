@@ -45,26 +45,19 @@ protected:
 
 	const static float PI;
 
+	void makeInitialVertexRing(const MPoint& startPoint, const BSegment& firstSeg, const int sides);
+
+	// Create a ring of vertices to connect bottomSeg and topSeg
+	void makeNextVertexRing(const MPoint& center, const BSegment& bottomSeg, const BSegment& topSeg, const int sides, std::vector<double>& adjustments);
+
+	// Create a ring of vertices when there is either no angle between the two segments or there is no top segment
+	void makeNextVertexRing(const MPoint& center, const BSegment& bottomSeg, const double ringRadius, const int sides, std::vector<double>& adjustments);
+
 	// Calculate all the vertex coordinates for a branchlet
 	void makeVertexCoords(const MPoint startPoint, const std::vector<BSegment>& segs, const int sides);
 
-	// Find the vectors from the center of the circle on the plane whose normal is defined by 'seg' to two points 90 degrees apart along its perimeter
-	void findEllipseVectors(MVector& major, MVector& minor, BSegment seg);
-
-	// Find the vectors from the center of the ellipse on the plane whose normal is defined by 'topSeg' to the points of maximum (major) and minimum (minor) curvature
-	void findEllipseVectors(MVector& major, MVector& minor, const MPoint& center, const BSegment& bottomSeg, const BSegment& topSeg);
-
-	// Use the parametric equation for an ellipse in 3D space to calculate the coordinates of 'sides' vertices along its perimeter
-	void makeVertexRing(const MVector& major, const MVector& minor, const MPoint& center, int sides, const MVector& topSegVect);
-
 	// Find the amount with which to multiply the distance between v coords so that they are proportional to their length in Maya
 	float getVScaler(float vertRingRadius, float uFaceWidth, int sides, float textureWtoHRatio);
-
-	// Find the polar angle of a vector in world space
-	double findVectorPolar(double x, double z);
-
-	// Project p onto the plane to which q is the normal vector, given a shared starting point
-	MVector projectByNormal(const MVector& p, const MVector& q, const MPoint& s);
 
 public:
 

@@ -65,104 +65,112 @@ Branchlets BranchletCreator::create(const MPoint& startPoint, int sides, const s
 
 void Branchlets::makeVertexCoords(const MPoint startPoint, const std::vector<BSegment>& segs, const int sides) {
 
-	MPoint ringCenter = startPoint;
-	MVector major, minor;
+	makeInitialVertexRing(startPoint, segs[0], sides);
 
-	// Make the first ring of vertices
-	findEllipseVectors(major, minor, segs[0]);
-	makeVertexRing(major, minor, ringCenter, sides, segs[0].v);
-	ringCenter += segs[0].v;
+	std::vector<double> adjustments(sides, 0.);
+	MPoint ringCenter = startPoint + segs[0].v;
 
-	// Make all vertex rings between the top and bottom of the branchlet
 	for (int i = 0; i < static_cast<int>(segs.size()) - 1; i++) {
 
-		findEllipseVectors(major, minor, ringCenter, segs[i], segs[i + 1]);
-		makeVertexRing(major, minor, ringCenter, sides, segs[i + 1].v);
-
+		makeNextVertexRing(ringCenter, segs[i], segs[i + 1], sides, adjustments);
 		ringCenter += segs[i + 1].v;
 	}
 
-	// Make the last ring of vertices
-	findEllipseVectors(major, minor, segs.back());
-	makeVertexRing(major, minor, ringCenter, sides, segs.back().v);
-
-	// Make the cap vertex
+	makeNextVertexRing(ringCenter, segs.back(), segs.back().r, sides, adjustments);
 	verts.append(ringCenter + (segs.back().v.normal() * segs.back().r));
 }
 
-void Branchlets::findEllipseVectors(MVector& major, MVector& minor, BSegment seg) {
+void Branchlets::makeInitialVertexRing(const MPoint& startPoint, const BSegment& firstSeg, const int sides) {
 
-	MVector cp = seg.v ^ MVector(1., 0., 0.);
+	MVector cp = firstSeg.v ^ MVector(1., 0., 0.);
 	if (cp.length() < .001) // In case the axis is directly on the x-axis
-		cp = seg.v ^ MVector(0., 1., 0.);
+		cp = firstSeg.v ^ MVector(0., 1., 0.);
 
-	minor = cp.normal() * seg.r;
+	MVector minor = cp.normal() * firstSeg.r;
 
 	MQuaternion rotation((PI / 2.f), minor);
-	major = (seg.v.normal() * seg.r).rotateBy(rotation);
-}
+	MVector major = (firstSeg.v.normal() * firstSeg.r).rotateBy(rotation);
 
-void Branchlets::findEllipseVectors(MVector& major, MVector& minor, const MPoint& center, const BSegment& bottomSeg, const BSegment& topSeg) {
-
-	double B = bottomSeg.v.angle(topSeg.v); // the angle between the two segments, remember it's measured as if they both face out from the same start point
-
-	double d = std::cos((PI / 2.) - B) * topSeg.v.length();
-
-	if (d < bottomSeg.r * 1.1) { // topSeg is too short or angle is too extreme to intersect
-
-		findEllipseVectors(major, minor, BSegment(bottomSeg.v + topSeg.v, topSeg.r));
-		return;
-	}
-
-	// The vector along the minor axis is easy since it is always the cross product with its magnitude set to the radius of the top segment
-	minor = (bottomSeg.v ^ topSeg.v).normal() * topSeg.r;
-
-	// To find the vector along the major axis we can use trig on the oblique triangle formed by some key points that lie on the plane
-	// to the cross product of the two segments.  See ConnectorRing.jpg for details.
-
-	// Find points p and q
-	double amountToRotate = (PI / 2.);
-	MQuaternion rotation(amountToRotate, minor);
-	MPoint p = (center - bottomSeg.v) + (bottomSeg.v.normal() * bottomSeg.r).rotateBy(rotation);
-	MPoint q = center + (topSeg.v.normal() * topSeg.r).rotateBy(rotation);
-
-	// Find a second angle of the triangle
-	MVector pToQ = (q - p);
-	double A = PI - (bottomSeg.v.angle(q - p) + B);
-
-	// Use the law of sines to find the distance from p, along the bottom segment's vector, to a point of maximum curvature.
-	double a = pToQ.length() * (std::sin(A) / std::sin(B));
-
-	MPoint r = p + (bottomSeg.v.normal() * a);
-	major = r - center;
-}
-
-void Branchlets::makeVertexRing(const MVector& major, const MVector& minor, const MPoint& center, int sides, const MVector& nextSegVect) {
-
-	// We can use the parametric equation of an ellipse to calculate the vertices. That is: p(t) = c + cos(t)u + sin(t)v, where p is the vertex
-	// coordinate as a function of t, the world space polar angle about the center of the ellipse.  To ensure that vertices on one ring are
-	// correctly aligned with those one the next ring up, create the shape of the ring in world space first by rotating minor and major, then 
-	// rotate back before setting the vertex's coords
-
-	MQuaternion segToWorld(nextSegVect, MVector::yAxis);
-	MVector minorInWorld = minor.rotateBy(segToWorld);
-	MVector majorInWorld = major.rotateBy(segToWorld);
-
-	// Major and minor are the vectors from the center of the ellipse to the points of maximum and minimum curvature.
-	// Since these vectors' polar angles change from one segment to the next, and since the resulting vertex ring depends 
-	// on these angles, we need to offset the starting angle accordingly.
-	double polarOffset = findVectorPolar(majorInWorld.x, majorInWorld.z);
-	double angle = 0. + polarOffset;
+	double angle = 0.;
 	double angleIncrement = ((PI * 2.f) / sides);
 
 	for (int i = 0; i < sides; i++) {
 
-		MVector toVertex = (std::cos(angle) * majorInWorld) + (std::sin(angle) * minorInWorld);
-
-		toVertex = toVertex.rotateBy(segToWorld.inverse());
-		verts.append(center + toVertex);
+		MVector toVertex = (std::cos(angle) * major) + (std::sin(angle) * minor);
+		verts.append(startPoint + toVertex);
 
 		angle += angleIncrement;
+	}
+}
+
+void Branchlets::makeNextVertexRing(const MPoint& center, const BSegment& bottomSeg, const BSegment& topSeg, const int sides,
+	std::vector<double>& lengthAdjustments) {
+
+	// the angle between the two segments, remember it's measured as if they both face out from the same start point
+	double A = (PI / 2.) - bottomSeg.v.angle(topSeg.v);
+
+	double d = std::cos(A) * topSeg.v.length();
+
+	if (d < bottomSeg.r * 1.1) { // topSeg is too short or angle is too extreme to intersect
+
+		makeNextVertexRing(center, bottomSeg, topSeg.r, sides, lengthAdjustments);
+		return;
+	}
+
+	// Find cornerUnderAngle - the point at the top corner of the bottom segment, inside the angle between, and on the plane whose normal
+	// is perpendicular to the segments
+	MVector minor = (bottomSeg.v ^ topSeg.v).normal() * topSeg.r;
+	MQuaternion rotation((PI / 2.), minor);
+	MVector toCorner = (bottomSeg.v.normal() * topSeg.r).rotateBy(rotation);
+
+	MPoint cornerUnderAngle = center + toCorner;
+
+	// Find maxAdjustment - the distance from cornerUnderAngle to the point where the segments' surfaces intersect
+	double a = std::sin(A) * topSeg.r;
+	double b = std::cos(A) * topSeg.r;
+	double c = std::tan(A) * (topSeg.r - a);
+	double maxAdjustment = c - b;
+
+	MVector topEdgeVector = toCorner * -2.;
+	double radiusDifference = topSeg.r - bottomSeg.r;
+	int lowerVertexIndex = verts.length() - sides;
+
+	for (int i = 0; i < sides; i++) {
+
+		MPoint vertex = verts[lowerVertexIndex++];
+
+		MVector toTopEdge = bottomSeg.v.normal() * (bottomSeg.v.length() + lengthAdjustments[i]);
+		vertex += toTopEdge;
+
+		MVector toRadius = (vertex - center).normal() * radiusDifference;
+		vertex += toRadius;
+
+		MVector cornerToVertex = vertex - cornerUnderAngle;
+		double angle = topEdgeVector.angle(cornerToVertex);
+		double distanceThrough = std::cos(angle) * cornerToVertex.length();
+		double adjustment = (1. - (distanceThrough / topSeg.r)) * maxAdjustment;
+		verts.append(vertex + bottomSeg.v.normal() * adjustment);
+		lengthAdjustments[i] = adjustment;
+	}
+}
+
+void Branchlets::makeNextVertexRing(const MPoint& center, const BSegment& bottomSeg, const double ringRadius, const int sides,
+	std::vector<double>& adjustments) {
+
+	double angle = 0.;
+	double angleIncrement = ((PI * 2.f) / sides);
+	int lowerVertexIndex = verts.length() - sides;
+	double radiusDifference = ringRadius - bottomSeg.r;
+
+	for (int i = 0; i < sides; i++) {
+
+		MPoint vertex = verts[lowerVertexIndex++];
+		MVector toTopEdge = bottomSeg.v.normal() * (bottomSeg.v.length() + adjustments[i]);
+		vertex += toTopEdge;
+		MVector toNewRadius = (vertex - center).normal() * radiusDifference;
+		vertex += toNewRadius;
+		verts.append(vertex);
+		adjustments[i] = 0.;
 	}
 }
 
@@ -422,28 +430,3 @@ void BranchletStrips::makeUVConnects(const int segmentCount, const int initialUV
 }
 
 const float Branchlets::PI = 3.1415926f;
-
-double Branchlets::findVectorPolar(double x, double z)
-{
-	double pol;
-
-	if (x > 0. && z > 0.) { pol = std::atan(z / x); }
-	else if (x < 0. && z > 0.) { pol = PI - std::atan(z / std::fabs(x)); }
-	else if (x < 0. && z < 0.) { pol = PI + std::atan(std::fabs(z) / std::fabs(x)); }
-	else if (x > 0. && z < 0.) { pol = (PI * 2.) - std::atan(std::fabs(z) / x); }
-	else if (z == 0. && x > 0.) { pol = 0.; }
-	else if (z == 0. && x < 0.) { pol = PI; }
-	else if (x == 0. && z > 0.) { pol = (PI / 2.); }
-	else if (x == 0. && z < 0.) { pol = PI + (PI / 2.); }
-	else { pol = 0.; }
-
-	return pol;
-}
-
-MVector Branchlets::projectByNormal(const MVector& p, const MVector& q, const MPoint& s) {
-
-	double angle = q.angle(p);
-	double distanceToPlane = std::sin((PI / 2.) - angle) * p.length();
-	MPoint pointOnPlane = (s + p) - (q.normal() * distanceToPlane);
-	return pointOnPlane - s;
-}
