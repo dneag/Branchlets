@@ -122,7 +122,6 @@ void Branchlets::makeNextVertexRing(const MPoint& center, const BSegment& bottom
 	MVector minor = (bottomSeg.v ^ topSeg.v).normal() * topSeg.r;
 	MQuaternion rotation((PI / 2.), minor);
 	MVector toCorner = (bottomSeg.v.normal() * topSeg.r).rotateBy(rotation);
-
 	MPoint cornerUnderAngle = center + toCorner;
 
 	// Find maxAdjustment - the distance from cornerUnderAngle to the point where the segments' surfaces intersect
@@ -135,6 +134,8 @@ void Branchlets::makeNextVertexRing(const MPoint& center, const BSegment& bottom
 	double radiusDifference = topSeg.r - bottomSeg.r;
 	int lowerVertexIndex = verts.length() - sides;
 
+	// For each new vertex, start with the point of its adjacent vertex on the ring below, then adjust it
+	// so that it is positioned on the ellipse connecting the two segments
 	for (int i = 0; i < sides; i++) {
 
 		MPoint vertex = verts[lowerVertexIndex++];
