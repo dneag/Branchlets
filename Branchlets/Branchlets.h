@@ -47,7 +47,7 @@ protected:
 
 	void makeInitialVertexRing(const MPoint& startPoint, const BSegment& firstSeg, const int sides);
 
-	// Create a ring of vertices to connect bottomSeg and topSeg
+	// Create a ring of vertices to connect bottomSeg and topSeg.  See ConnectorRing.jpg for details
 	void makeNextVertexRing(const MPoint& center, const BSegment& bottomSeg, const BSegment& topSeg, const int sides, std::vector<double>& adjustments);
 
 	// Create a ring of vertices when there is either no angle between the two segments or there is no top segment
