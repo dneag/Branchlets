@@ -11,6 +11,7 @@
 
 #include "MMesh.h"
 
+// The building block of Branchlets.  A list of these is input to the Branchlet constructor.
 struct BSegment {
 
 	// A vector describing the direction and length of a branchlet segment
